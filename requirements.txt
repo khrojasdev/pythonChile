@@ -1,0 +1,11 @@
+nicegui>=3.18,<4
+sqlmodel>=0.0.48
+pandas>=3.0
+numpy>=2.0
+fpdf2>=2.9
+faker>=30.0
+psycopg[binary]>=3.2   # solo si se usa PostgreSQL (DATABASE_URL)
+
+# pruebas
+pytest>=8.0
+pytest-asyncio>=1.0

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: mar-adentro
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.main
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.1
+      - key: STORAGE_SECRET
+        generateValue: true
+      - key: PIN_SINDICATO
+        value: "1234"
+      - key: PIN_REGISTRADORA
+        value: "0000"
