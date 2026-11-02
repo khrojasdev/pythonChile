@@ -1,37 +1,72 @@
 """Portada pública: clima del día, pronóstico, noticias de pesca y avisos. Botón para ingresar."""
 from datetime import datetime
+from pathlib import Path
 
 from nicegui import ui
 from sqlmodel import select
 
 from app.analytics import dec
 from app.db import sesion
-from app.ilustraciones import HERO
 from app.models import Aviso
 from app.servicios import clima, noticias
 from app.ui_comun import BOYA, COLORES, MARINO, estilos, logo, rol_actual
 
 TEXTO_MAR = {"verde": "Mar tranquilo", "amarillo": "Mar regular", "rojo": "Mar malo", "gris": "Sin dato de oleaje"}
 
-CSS_PORTADA = f"""
+# Foto: «Wiki Tour - Caleta Portales 01», Nereidas, CC BY-SA 3.0, Wikimedia Commons.
+# Si existe app/static/caleta_portales.jpg se usa la copia local (no depende de internet).
+FOTO_REMOTA = ("https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Wiki_Tour_-_Caleta_Portales_01.JPG/"
+               "1920px-Wiki_Tour_-_Caleta_Portales_01.JPG")
+FOTO_LOCAL = Path(__file__).resolve().parent.parent / "static" / "caleta_portales.jpg"
+FOTO_PAGINA = "https://commons.wikimedia.org/wiki/File:Wiki_Tour_-_Caleta_Portales_01.JPG"
+FOTO_CREDITO = "Foto: Caleta Portales, Valparaíso · Nereidas · CC BY-SA 3.0"
+
+
+def url_foto() -> str:
+    return "/static/caleta_portales.jpg" if FOTO_LOCAL.exists() else FOTO_REMOTA
+
+
+CSS_PORTADA = """
 <style>
-  .hero {{ width:100%; background:linear-gradient(180deg,#A9D0E3 0%,#DDEBEF 100%); }}
-  .hero-capa {{ max-width:1080px; margin:0 auto; padding:40px 20px 24px; display:flex; gap:28px;
-               align-items:flex-end; justify-content:space-between; flex-wrap:wrap; }}
-  .hero h1 {{ font-size:48px !important; color:{MARINO}; max-width:580px; line-height:1.02 !important; }}
-  .hero-paisaje {{ height:clamp(130px, 24vw, 300px); width:100%; display:block; margin-top:-8px; }}
-  .hero-paisaje svg {{ width:100%; height:100%; display:block; }}
-  .clima-hoy {{ background:rgba(255,255,255,.94); border-radius:16px; padding:16px 20px; width:400px; max-width:100%;
-                border:1px solid rgba(11,60,93,.15); }}
-  .temp {{ font-family:'Archivo'; font-size:52px; font-weight:800; line-height:1; color:{MARINO}; }}
-  .dia-pron {{ background:white; border:1px solid #D6E3EA; border-radius:12px; padding:10px 12px; min-width:118px; }}
-  .tira {{ overflow-x:auto; flex-wrap:nowrap; padding-bottom:6px; }}
-  .noticia {{ border-bottom:1px solid #E1EAEF; padding:12px 0; }}
-  .noticia:last-child {{ border-bottom:0; }}
-  .noticia a {{ color:{MARINO}; font-weight:700; text-decoration:none; }}
-  .noticia a:hover {{ text-decoration:underline; }}
-  @media (max-width:600px) {{ .hero h1 {{ font-size:33px !important; }} .temp {{ font-size:42px; }}
-    .hero-capa {{ padding:24px 16px 18px; }} }}
+  .hero { position:relative; width:100%; min-height:600px; color:white; overflow:hidden;
+          background:#0B3C5D var(--foto) center 78% / cover no-repeat; }
+  .hero::before { content:""; position:absolute; inset:0;
+     background: linear-gradient(100deg, rgba(6,33,54,.92) 0%, rgba(8,45,72,.72) 38%, rgba(8,45,72,.18) 68%,
+                 rgba(8,45,72,0) 100%),
+                 linear-gradient(0deg, rgba(6,33,54,.85) 0%, rgba(6,33,54,0) 34%); }
+  .hero-nav { position:relative; max-width:1120px; margin:0 auto; padding:18px 20px; display:flex;
+              align-items:center; gap:12px; }
+  .marca-nombre { font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:22px; line-height:1;
+                  font-stretch:87%; }
+  .marca-sub { font-size:13px; opacity:.8; }
+  .hero-capa { position:relative; max-width:1120px; margin:0 auto; padding:56px 20px 120px; display:flex;
+               gap:32px; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; }
+  .hero h1 { font-size:56px !important; color:white; max-width:600px; line-height:1 !important;
+             text-wrap:balance; text-shadow:0 2px 18px rgba(0,0,0,.25); }
+  .hero-bajada { font-size:19px; max-width:520px; opacity:.95; }
+  .clima-hoy { background:rgba(255,255,255,.95); color:#16242F; border-radius:18px; padding:18px 22px;
+               width:380px; max-width:100%; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+  .temp { font-family:'Archivo'; font-size:54px; font-weight:800; line-height:1; color:#0B3C5D; }
+  .credito { position:absolute; right:12px; bottom:8px; font-size:11px; color:rgba(255,255,255,.8);
+             text-decoration:none; }
+  .credito:hover { text-decoration:underline; }
+  .tira-panel { position:relative; max-width:1120px; margin:-72px auto 0; padding:0 20px; z-index:2; }
+  .tira-caja { background:white; border-radius:18px; padding:16px 18px; box-shadow:0 10px 30px rgba(11,60,93,.14); }
+  .dia-pron { background:#F4F8FA; border-radius:12px; padding:10px 12px; min-width:124px; }
+  .tira { overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
+  .noticia { border-bottom:1px solid #E1EAEF; padding:12px 0; }
+  .noticia:last-child { border-bottom:0; }
+  .noticia a { color:#0B3C5D; font-weight:700; text-decoration:none; }
+  .noticia a:hover { text-decoration:underline; }
+  @media (max-width:700px) {
+    .hero { min-height:0; background-position:62% center; }
+    .hero::before { background: linear-gradient(180deg, rgba(6,33,54,.85) 0%, rgba(6,33,54,.65) 45%,
+                    rgba(6,33,54,.9) 100%); }
+    .hero h1 { font-size:36px !important; }
+    .hero-capa { padding:28px 16px 96px; }
+    .temp { font-size:44px; }
+    .tira-panel { padding:0 14px; }
+  }
 </style>
 """
 
@@ -40,34 +75,41 @@ CSS_PORTADA = f"""
 async def portada():
     estilos()
     ui.add_head_html(CSS_PORTADA)
-    with ui.header().classes("items-center no-wrap px-4 py-2").style(f"background:{MARINO}"):
-        logo(34)
-        ui.label("Mar Adentro").classes("titulo text-white text-xl font-extrabold")
-        ui.space()
-        destino = "/inicio" if rol_actual() else "/ingresar"
-        ui.button("Ir a mi panel" if rol_actual() else "Ingresar", icon="login",
-                  on_click=lambda: ui.navigate.to(destino)).props("color=accent text-color=dark unelevated") \
-            .mark("boton-ingresar")
+    ui.add_head_html(f'<link rel="preload" as="image" href="{url_foto()}">')
+    destino = "/inicio" if rol_actual() else "/ingresar"
 
-    with ui.element("section").classes("hero"):
+    with ui.element("section").classes("hero").style(f"--foto:url('{url_foto()}')"):
+        with ui.element("nav").classes("hero-nav"):
+            logo(44)
+            with ui.column().classes("gap-0"):
+                ui.label("Mar Adentro").classes("marca-nombre")
+                ui.label("Caleta digital").classes("marca-sub")
+            ui.space()
+            ui.button("Ir a mi panel" if rol_actual() else "Ingresar", icon="login",
+                      on_click=lambda: ui.navigate.to(destino)) \
+                .props("color=accent text-color=dark unelevated").mark("boton-ingresar")
         with ui.element("div").classes("hero-capa"):
-            with ui.column().classes("gap-2"):
+            with ui.column().classes("gap-3"):
                 ui.html("<h1>Cada salida al mar, con datos que ayudan a decidir</h1>")
-                ui.label("Registro de capturas, precios de playa y trabajo en tierra de la caleta.") \
-                    .classes("text-lg").style(f"color:{MARINO}; max-width:520px")
+                ui.label("Capturas, precios de playa y trabajo en tierra de la caleta, en un solo lugar.") \
+                    .classes("hero-bajada")
+                ui.button("Ingresar a la caleta", icon="arrow_forward", on_click=lambda: ui.navigate.to(destino)) \
+                    .props("color=white text-color=primary unelevated size=lg").classes("mt-2")
             caja_clima = ui.column().classes("clima-hoy gap-1")
             with caja_clima:
                 ui.skeleton().classes("w-64 h-24")
-        ui.html(HERO).classes("hero-paisaje")
+
+    with ui.element("div").classes("tira-panel"):
+        with ui.column().classes("tira-caja gap-2"):
+            with ui.row().classes("w-full items-end justify-between"):
+                ui.html("<h2>Próximos días</h2>")
+                fuente_clima = ui.label("").classes("tenue")
+            tira = ui.row().classes("tira w-full gap-2")
+            with tira:
+                for _ in range(5):
+                    ui.skeleton().classes("w-28 h-32")
 
     with ui.column().classes("contenedor"):
-        with ui.row().classes("w-full items-end justify-between"):
-            ui.html("<h2>Próximos días</h2>")
-            fuente_clima = ui.label("").classes("tenue")
-        tira = ui.row().classes("tira w-full gap-2")
-        with tira:
-            for _ in range(5):
-                ui.skeleton().classes("w-28 h-36")
 
         with ui.row().classes("fila-resp items-start"):
             with ui.column().classes("tarjeta gap-0 flex-[3]").style("min-width:0"):
@@ -94,6 +136,8 @@ async def portada():
         ui.label("Los datos de la caleta son ficticios (Hackatón Python Chile · Duoc UC Valparaíso). "
                  "Clima y oleaje: Open-Meteo. Noticias: Google Noticias. Para navegar, sigue siempre "
                  "los avisos oficiales de la Capitanía de Puerto.").classes("tenue text-center w-full mt-4")
+        with ui.row().classes("w-full justify-center"):
+            ui.link(f"{FOTO_CREDITO} (Wikimedia Commons)", FOTO_PAGINA, new_tab=True).classes("tenue text-xs")
 
     # ------- se cargan después de mostrar la página: así nunca queda "pegada"
     await ui.context.client.connected()

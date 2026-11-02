@@ -1,5 +1,6 @@
 """Punto de entrada.  Local:  python -m app.main   ·   Render: ver render.yaml"""
 import os
+from pathlib import Path
 
 from fastapi.responses import RedirectResponse
 from nicegui import app, ui
@@ -10,6 +11,7 @@ from app.pages import (avisos_clima, cuaderno, gestion, informes, ingresar, inic
                        mis_numeros, pendientes, portada, precio, registro, revision, salir, tierra)
 from app.seed import asegurar_datos
 
+app.add_static_files("/static", Path(__file__).parent / "static")
 asegurar_datos()   # en Render el disco es temporal: si la base está vacía, genera datos ficticios
 
 

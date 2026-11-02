@@ -14,13 +14,28 @@ CASCO_ROJO = "#C8402F"
 ALGA = "#2F7D5B"
 
 LOGO = f"""<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mar Adentro">
-<circle cx="32" cy="32" r="30" fill="{MARINO}" stroke="#fff" stroke-width="2"/>
-<path d="M14 34h36l-5 9H19z" fill="{BOYA}"/>
-<path d="M17 38h30" stroke="#fff" stroke-width="2"/>
-<path d="M31 14v20" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
-<path d="M33 16l11 15H33z" fill="#fff"/>
-<path d="M8 47c4 0 4-3 8-3s4 3 8 3 4-3 8-3 4 3 8 3 4-3 8-3 4 3 8 3" fill="none" stroke="{CELESTE}"
- stroke-width="2.5" stroke-linecap="round"/>
+<defs>
+ <linearGradient id="mafondo" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#2B7FAF"/><stop offset=".55" stop-color="{MAR}"/><stop offset="1" stop-color="{MARINO}"/>
+ </linearGradient>
+ <clipPath id="macorte"><rect width="64" height="64" rx="15"/></clipPath>
+</defs>
+<g clip-path="url(#macorte)">
+ <rect width="64" height="64" fill="url(#mafondo)"/>
+ <circle cx="43" cy="33" r="12" fill="{BOYA}"/>
+ <rect y="35" width="64" height="29" fill="#0F4F78"/>
+ <path d="M30 34V14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+ <path d="M30 16l9 4-9 4z" fill="{CASCO_ROJO}"/>
+ <rect x="17" y="26" width="10" height="8" rx="1.5" fill="#fff"/>
+ <rect x="19.5" y="28.3" width="3.2" height="3.2" fill="{MAR}"/>
+ <path d="M8 34h40l-6 10H13z" fill="#fff"/>
+ <path d="M10.5 38.2h35" stroke="{CASCO_ROJO}" stroke-width="2.6"/>
+ <path d="M0 51c5 0 5-3.2 10.7-3.2S16 51 21.3 51s5.3-3.2 10.7-3.2S37.3 51 42.7 51s5.3-3.2 10.6-3.2S58.7 51 64 51"
+  fill="none" stroke="#7FC0E2" stroke-width="2.6" stroke-linecap="round"/>
+ <path d="M0 58c5 0 5-3.2 10.7-3.2S16 58 21.3 58s5.3-3.2 10.7-3.2S37.3 58 42.7 58s5.3-3.2 10.6-3.2S58.7 58 64 58"
+  fill="none" stroke="#7FC0E2" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+</g>
+<rect x=".9" y=".9" width="62.2" height="62.2" rx="14.2" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.8"/>
 </svg>"""
 
 

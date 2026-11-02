@@ -56,3 +56,9 @@ pytest -q
 ```
 33 pruebas: validación, analítica, revisión (aprobar/corregir/rechazar/deshacer), exportaciones,
 parsers de clima y noticias, y recorridos de interfaz con cada perfil.
+
+## Foto de portada
+
+«Wiki Tour - Caleta Portales 01», de Nereidas, licencia CC BY-SA 3.0, en
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Wiki_Tour_-_Caleta_Portales_01.JPG).
+Se carga desde Wikimedia; si existe `app/static/caleta_portales.jpg`, se usa esa copia local.
