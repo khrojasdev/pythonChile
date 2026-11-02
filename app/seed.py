@@ -20,7 +20,7 @@ from sqlmodel import select
 
 from app import config
 from app.db import crear_tablas, engine, sesion
-from app.models import (Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
+from app.models import (Aviso, Meta, Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
                         Especie, Origen, PersonaTierra, TipoComprador, TipoTrabajo,
                         TrabajoTierra)
 from app.validation import ReferenciaPrecio, validar_desembarque, validar_trabajo_tierra
@@ -69,7 +69,7 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
 
     crear_tablas()
     with sesion() as s:
-        for modelo in (TrabajoTierra, Desembarque, CondicionMar, PersonaTierra,
+        for modelo in (Aviso, TrabajoTierra, Desembarque, CondicionMar, PersonaTierra,
                        Comprador, Embarcacion, Especie):
             s.exec(delete(modelo))
         s.commit()
@@ -233,6 +233,10 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
 
         s.execute(insert(Desembarque), filas_d)
         s.execute(insert(TrabajoTierra), filas_t)
+        _avisos_demo(s, hoy)
+        meta = s.get(Meta, "schema") or Meta(clave="schema", valor="")
+        meta.valor = SCHEMA
+        s.add(meta)
         s.commit()
 
     if verbose:
@@ -240,11 +244,39 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
               f"{len(filas_t)} registros de trabajo en tierra.")
 
 
+SCHEMA = "2"   # súbelo cuando cambien las tablas: la base de demo se regenera sola
+
+
+def _avisos_demo(s, hoy: date) -> None:
+    from datetime import datetime, time, timezone
+    avisos = [
+        ("Asamblea de socios el jueves", "Revisaremos la postulación al fondo de equipamiento. "
+         "Trae tus dudas sobre el registro de desembarques.", "reunion", True, 2),
+        ("Cuota de jibia sobre el 80 %", "Queda poco margen para el resto del año. "
+         "Coordinemos las salidas para no pasarnos.", "alerta", False, 4),
+        ("Nueva balanza en el muelle", "Desde este mes se puede pesar la captura al llegar. "
+         "Un dato pesado vale más que uno estimado.", "info", False, 9),
+    ]
+    for titulo, cuerpo, tipo, fijado, dias in avisos:
+        s.add(Aviso(titulo=titulo, cuerpo=cuerpo, tipo=tipo, fijado=fijado,
+                    publicado_en=datetime.combine(hoy - timedelta(days=dias), time(21, 30), tzinfo=timezone.utc)))
+
+
 def asegurar_datos() -> None:
-    """Si la base está vacía (ej: Render recién desplegado), genera los datos."""
+    """Si la base está vacía o es de una versión anterior, genera los datos de demo."""
+    from sqlalchemy import inspect
+    from sqlmodel import SQLModel
+    insp = inspect(engine)
+    vieja = False
+    if insp.has_table("desembarque"):
+        columnas = {c["name"] for c in insp.get_columns("desembarque")}
+        vieja = "revisado_por" not in columnas
+    if vieja:   # esquema anterior: se borra y se rehace (solo datos ficticios)
+        SQLModel.metadata.drop_all(engine)
     crear_tablas()
     with sesion() as s:
-        if s.exec(select(Especie)).first() is None:
+        meta = s.get(Meta, "schema")
+        if s.exec(select(Especie)).first() is None or meta is None or meta.valor != SCHEMA:
             generar()
 
 

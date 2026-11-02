@@ -4,6 +4,7 @@ pandas>=3.0
 numpy>=2.0
 fpdf2>=2.9
 faker>=30.0
+httpx>=0.27            # clima (Open-Meteo) y noticias (RSS)
 psycopg[binary]>=3.2   # solo si se usa PostgreSQL (DATABASE_URL)
 
 # pruebas

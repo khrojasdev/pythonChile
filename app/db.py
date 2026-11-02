@@ -1,6 +1,7 @@
 """Conexión a la base de datos (SQLite local o PostgreSQL en Render)."""
 from pathlib import Path
 
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from app import config
@@ -18,3 +19,10 @@ def crear_tablas() -> None:
 
 def sesion() -> Session:
     return Session(engine)
+
+
+@event.listens_for(Session, "after_commit")
+def _invalidar_cache(_session) -> None:
+    """Cualquier dato guardado invalida los cálculos en caché."""
+    from app import analytics
+    analytics.invalidar()

@@ -38,3 +38,13 @@ PIN_SINDICATO = os.environ.get("PIN_SINDICATO", "1234")
 PIN_REGISTRADORA = os.environ.get("PIN_REGISTRADORA", "0000")
 
 STORAGE_SECRET = os.environ.get("STORAGE_SECRET", "mar-adentro-demo-cambiar")
+
+# ---------------------------------------------------------------- fuentes externas
+# Ubicación de la caleta (ficticia, frente a la costa de Valparaíso)
+LATITUD, LONGITUD = -33.03, -71.63
+LATITUD_MAR, LONGITUD_MAR = -33.02, -71.68      # punto en el mar para el oleaje
+
+# Clima y oleaje reales desde Open-Meteo (gratis, sin clave). "0" = usar solo el simulado.
+CLIMA_REAL = os.environ.get("CLIMA_REAL", "1") == "1"
+# Noticias reales desde el RSS de Google Noticias. "0" = mostrar solo avisos de demo.
+NOTICIAS_REALES = os.environ.get("NOTICIAS_REALES", "1") == "1"

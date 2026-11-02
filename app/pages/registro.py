@@ -32,22 +32,24 @@ def registro():
     estado = {"embarcacion_id": bote_actual(), "fecha": date.today().isoformat(),
               "litros": None, "carnada": None, "lineas": [_linea_vacia()]}
 
-    with marco("Anotar desembarque"):
+    with marco("Anotar desembarque", "/registro", "Se anota en tierra, al llegar. Solo especie y kilos son obligatorios; el precio se puede completar después."):
         with ui.column().classes("tarjeta"):
             if rol_actual() == Rol.REGISTRADORA.value:
                 ui.select(botes, label="Embarcación", with_input=True).bind_value(estado, "embarcacion_id") \
                     .classes("w-full")
             else:
-                ui.label(f"🛶 {botes.get(estado['embarcacion_id'], '')}").classes("grande")
+                with ui.row().classes("items-center gap-2"):
+                    ui.icon("directions_boat", size="28px").style("color:#1D6A8A")
+                    ui.label(botes.get(estado['embarcacion_id'], '')).classes("grande")
             with ui.row().classes("w-full gap-2 items-center"):
                 ui.button("Hoy", on_click=lambda: fecha.set_value(date.today().isoformat())).props("outline")
                 ui.button("Ayer", on_click=lambda: fecha.set_value((date.today() - timedelta(days=1)).isoformat())) \
                     .props("outline")
                 fecha = ui.input("Fecha").props("type=date").bind_value(estado, "fecha").classes("flex-grow")
             with ui.row().classes("w-full gap-2 no-wrap"):
-                ui.number("⛽ Litros combustible", min=0).props("inputmode=decimal") \
+                ui.number("Litros de combustible", min=0).props("inputmode=decimal") \
                     .bind_value(estado, "litros").classes("w-1/2")
-                ui.number("🪱 Carnada ($)", min=0, step=1000).props("inputmode=numeric") \
+                ui.number("Carnada ($)", min=0, step=1000).props("inputmode=numeric") \
                     .bind_value(estado, "carnada").classes("w-1/2")
 
         @ui.refreshable
@@ -67,19 +69,20 @@ def registro():
                             .bind_value(ln, "precio").classes("w-1/2")
                     ui.select({0: "Aún no vendo", **compradores}, label="¿A quién?") \
                         .bind_value(ln, "comprador_id").classes("w-full")
-                    ui.toggle({Origen.PESADO.value: "⚖️ Pesado en balanza", Origen.ESTIMADO.value: "👀 Estimado"}) \
+                    ui.toggle({Origen.PESADO.value: "Pesado en balanza", Origen.ESTIMADO.value: "Estimado a ojo"}) \
                         .props("no-caps spread").bind_value(ln, "origen").classes("w-full")
 
         lineas()
-        ui.button("➕ Otra especie", on_click=lambda: (estado["lineas"].append(_linea_vacia()), lineas.refresh())) \
-            .props("outline no-caps").classes("w-full")
+        ui.button("Agregar otra especie", icon="add", on_click=lambda: (estado["lineas"].append(_linea_vacia()), lineas.refresh())) \
+            .props("outline").classes("w-full")
 
         resultado = ui.column().classes("w-full gap-3")
 
         async def guardar():
             await _guardar(estado, resultado, lineas)
 
-        ui.button("💾 Guardar", on_click=guardar).classes("w-full text-lg").props("size=lg")
+        ui.button("Guardar desembarque", icon="save", on_click=guardar).classes("w-full text-lg") \
+            .props("size=lg unelevated")
 
 
 async def _guardar(estado, resultado, lineas):
@@ -121,11 +124,11 @@ async def _guardar(estado, resultado, lineas):
             with ui.dialog() as dlg, ui.card():
                 ui.label("Revisa antes de guardar").classes("grande")
                 for esp, res in advertencias:
-                    ui.label(f"{esp.icono} {esp.nombre}: {res.texto}")
+                    ui.label(f"{esp.nombre}: {res.texto}")
                 ui.label("Si está bien, se guarda igual y queda marcado para revisión.").classes("text-sm")
                 with ui.row():
                     ui.button("Corregir", on_click=lambda: dlg.submit(False)).props("outline")
-                    ui.button("Guardar igual", on_click=lambda: dlg.submit(True))
+                    ui.button("Guardar igual", on_click=lambda: dlg.submit(True)).props("unelevated")
             if not await dlg:
                 return
 
@@ -146,18 +149,21 @@ async def _guardar(estado, resultado, lineas):
         costo = (estado["litros"] or 0) * config.PRECIO_LITRO_DEFECTO + (estado["carnada"] or 0)
         piso = costo / kg_total if costo and kg_total else None
         with resultado:
-            ui.label("✅ Guardado").classes("grande text-positive")
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("check_circle", size="30px").classes("text-positive")
+                ui.label("Desembarque guardado").classes("grande text-positive")
             for ln, esp, ref, _ in validaciones:
                 if ln["precio"]:
                     v = analytics.evaluar_oferta(ref, ln["precio"], piso)
-                    tarjeta_veredicto(v.color, f"{esp.icono} {esp.nombre} a {analytics.clp(ln['precio'])}: {v.titulo}",
+                    tarjeta_veredicto(v.color, f"{esp.nombre} a {analytics.clp(ln['precio'])}: {v.titulo}",
                                       v.razones)
                 else:
-                    tarjeta_veredicto("gris", f"{esp.icono} {esp.nombre}: precio pendiente",
+                    tarjeta_veredicto("gris", f"{esp.nombre}: precio pendiente",
                                       [f"Referencia del mes: entre {analytics.clp(ref.p25)} y {analytics.clp(ref.p75)}/kg."
                                        if ref.n else "Sin precios recientes de referencia."])
             if piso:
-                ui.label(f"🎯 Con lo que gastaste hoy, cada kilo debe venderse sobre {analytics.clp(piso)}.") \
+                ui.label(f"Con lo que gastaste hoy, cada kilo debe venderse sobre {analytics.clp(piso)}.") \
                     .classes("text-base")
     estado.update(lineas=[_linea_vacia()], litros=None, carnada=None)
     lineas.refresh()
+    ui.run_javascript(f"document.getElementById('c{resultado.id}').scrollIntoView({{behavior:'smooth'}})")

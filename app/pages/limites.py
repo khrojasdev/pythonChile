@@ -24,22 +24,30 @@ SECCIONES = {
     ],
     "Privacidad: quién ve qué": [
         "El pescador ve sus propios números. Nadie más ve los datos de su embarcación.",
-        "El sindicato ve totales de la caleta, sin nombres.",
+        "La directiva ve totales de la caleta; revisa datos dudosos y deja constancia de cada decisión.",
         "Los informes para terceros no incluyen embarcaciones ni zonas de pesca.",
         "No se registran zonas de pesca: evita que todos salgan al mismo lugar.",
     ],
+    "De dónde vienen los datos": [
+        "Capturas, precios, botes y personas de la caleta: inventados por el equipo (condición del hackatón).",
+        "Los precios ficticios se generaron alrededor de un valor base por especie, con variaciones diarias "
+        "calibradas para reproducir las cifras del caso (hasta 2,3 veces en un mes).",
+        "Clima y oleaje: Open-Meteo, API pública y gratuita. Si no responde, se usa un mar simulado y se avisa.",
+        "Noticias: buscador público de Google Noticias. En producción, la fuente de precios oficial serían los "
+        "registros de desembarque y precios de playa que publican los organismos del sector pesquero.",
+    ],
     "Lo que no puede cambiar": [
         "Vedas y cuotas son reglas externas: la plataforma solo avisa y lleva la cuenta.",
-        "Todos los datos de esta demostración son ficticios, incluido el estado del mar.",
+        "Los datos de la caleta son ficticios. El clima es real cuando hay conexión; si no, se simula y se avisa.",
     ],
 }
 
 
 @ui.page("/limites")
 def limites():
-    with marco("Límites y decisiones"):
+    with marco("Cómo usamos los datos", "/limites", "Decisiones del equipo y lo que los datos NO permiten concluir."):
         for titulo, puntos in SECCIONES.items():
             with ui.column().classes("tarjeta gap-1"):
-                ui.label(titulo).classes("font-bold text-lg")
+                ui.html(f"<h2>{titulo}</h2>")
                 for p in puntos:
                     ui.label(f"• {p}")

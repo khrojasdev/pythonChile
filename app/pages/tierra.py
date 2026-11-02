@@ -23,7 +23,8 @@ def tierra():
     if r := sin_permiso([Rol.REGISTRADORA, Rol.SINDICATO]):
         return r
     with sesion() as s:
-        personas = {p.id: p.nombre for p in s.exec(select(PersonaTierra).order_by(PersonaTierra.nombre)).all()}
+        personas = {p.id: p.nombre for p in s.exec(select(PersonaTierra).where(PersonaTierra.activa == True)  # noqa: E712
+                                                    .order_by(PersonaTierra.nombre)).all()}
         rol_de = {p.id: p.rol_principal.value for p in s.exec(select(PersonaTierra)).all()}
         botes = {0: "Para la caleta (general)",
                  **{b.id: b.nombre for b in s.exec(select(Embarcacion).order_by(Embarcacion.nombre)).all()}}
@@ -31,9 +32,10 @@ def tierra():
     estado = {"persona_id": None, "tipo": TipoTrabajo.ENCARNADO.value, "cantidad": None, "horas": None,
               "fecha": date.today().isoformat(), "embarcacion_id": 0}
 
-    with marco("Trabajo en tierra"):
+    with marco("Trabajo en tierra", "/tierra",
+               "Encarnado, fileteo, venta y limpieza. Se anota al final de la jornada."):
         resumen = ui.row().classes("w-full")
-        with ui.column().classes("tarjeta"):
+        with ui.column().classes("tarjeta gap-3"):
             def al_elegir_persona(e):
                 if e.value in rol_de:
                     estado["tipo"] = rol_de[e.value]
@@ -41,8 +43,8 @@ def tierra():
                     actualizar_unidad()
             ui.select(personas, label="Persona", with_input=True, on_change=al_elegir_persona) \
                 .bind_value(estado, "persona_id").classes("w-full")
-            tipo_toggle = ui.toggle({t.value: f"{ICONOS[t]} {t.value.capitalize()}" for t in TipoTrabajo}) \
-                .props("no-caps toggle-color=secondary").bind_value(estado, "tipo").classes("flex-wrap")
+            tipo_toggle = ui.toggle({t.value: t.value.capitalize() for t in TipoTrabajo}) \
+                .props("unelevated toggle-color=primary spread").bind_value(estado, "tipo").classes("flex-wrap")
             with ui.row().classes("w-full gap-2 no-wrap"):
                 cantidad = ui.number("Cantidad", min=0).props("inputmode=decimal") \
                     .bind_value(estado, "cantidad").classes("w-1/2")
@@ -86,12 +88,12 @@ def tierra():
                                     embarcacion_id=estado["embarcacion_id"] or None, calidad=res.calidad,
                                     notas_calidad=res.texto, registrado_por=rol_actual() or ""))
                 s.commit()
-            ui.notify(f"✅ Guardado: {personas[estado['persona_id']]}"
+            ui.notify(f"Guardado: {personas[estado['persona_id']]}"
                       + (f" ({res.texto})" if res.motivos else ""), type="positive")
             estado.update(persona_id=None, cantidad=None, horas=None)
             pintar_resumen()
 
-        ui.button("💾 Guardar", on_click=guardar).classes("w-full").props("size=lg")
+        ui.button("Guardar trabajo", icon="save", on_click=guardar).classes("w-full").props("size=lg")
 
         def pintar_resumen():
             resumen.clear()
@@ -99,7 +101,7 @@ def tierra():
             with sesion() as s:
                 df = analytics.tierra_df(s, desde=hoy - timedelta(days=30), hasta=hoy)
             with resumen:
-                with ui.grid(columns=3).classes("w-full gap-2"):
+                with ui.element("div").classes("rejilla"):
                     kpi(f"{df['persona_id'].nunique() if not df.empty else 0}", "personas (30 días)")
                     kpi(f"{df['horas'].sum():,.0f}".replace(",", ".") if not df.empty else "0", "horas (30 días)")
                     kpi(analytics.clp_corto(df["valor"].sum()) if not df.empty else "$0", "valor del trabajo")

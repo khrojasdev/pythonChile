@@ -16,8 +16,8 @@ import pandas as pd
 from sqlmodel import Session, select
 
 from app import config
-from app.models import (Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
-                        Especie, PersonaTierra, TrabajoTierra)
+from app.models import (EXCLUIDAS, Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
+                        Especie, Origen, PersonaTierra, TipoTrabajo, TrabajoTierra)
 from app.validation import ReferenciaPrecio, en_veda
 
 
@@ -40,52 +40,90 @@ def dec(valor: float, d: int = 1) -> str:
     return f"{valor:.{d}f}".replace(".", ",")
 
 
-# ------------------------------------------------------------------ carga
+# ------------------------------------------------------------------ caché
+# Calcular con pandas sobre toda la tabla cada vez que se abre una página bloqueaba
+# el servidor varios segundos (en Render gratis, aún más) y el navegador mostraba
+# "sin conexión". Ahora las tablas se cargan UNA vez y se reutilizan hasta que alguien
+# guarda algo: cada commit en la base invalida el caché (ver db.py).
+_cache: dict = {}
+
+
+def invalidar() -> None:
+    _cache.clear()
+
+
+def _memo(clave, fn):
+    if clave not in _cache:
+        _cache[clave] = fn()
+    return _cache[clave]
+
+
+def _valor_enum(enum_cls, v):
+    """SQLite guarda el NOMBRE del enum (OK); lo pasamos a su valor ("ok")."""
+    if v is None:
+        return None
+    if isinstance(v, enum_cls):
+        return v.value
+    try:
+        return enum_cls[v].value
+    except KeyError:
+        return enum_cls(v).value
+
+
+def _base_desembarques(s: Session) -> pd.DataFrame:
+    def cargar():
+        df = pd.read_sql(select(Desembarque), s.connection())
+        if df.empty:
+            return df
+        especies = {e.id: e.nombre for e in s.exec(select(Especie)).all()}
+        compradores = {c.id: c.tipo.value for c in s.exec(select(Comprador)).all()}
+        df["calidad"] = df["calidad"].map(lambda v: _valor_enum(Calidad, v))
+        df["origen"] = df["origen"].map(lambda v: _valor_enum(Origen, v))
+        df["especie"] = df["especie_id"].map(especies)
+        df["comprador_tipo"] = df["comprador_id"].map(compradores)
+        df["fecha"] = pd.to_datetime(df["fecha"])
+        df["ingreso"] = df["kg"] * df["precio_kg"]
+        return df
+    return _memo("desembarques", cargar)
+
+
 def desembarques_df(s: Session, desde: Optional[date] = None, hasta: Optional[date] = None,
                     embarcacion_id: Optional[int] = None, incluir_errores: bool = False) -> pd.DataFrame:
-    q = select(Desembarque)
-    if desde:
-        q = q.where(Desembarque.fecha >= desde)
-    if hasta:
-        q = q.where(Desembarque.fecha <= hasta)
-    if embarcacion_id:
-        q = q.where(Desembarque.embarcacion_id == embarcacion_id)
-    if not incluir_errores:
-        q = q.where(Desembarque.calidad != Calidad.ERROR)
-    filas = [d.model_dump() for d in s.exec(q).all()]
-    df = pd.DataFrame(filas)
+    df = _base_desembarques(s)
     if df.empty:
-        return df
-    especies = {e.id: e.nombre for e in s.exec(select(Especie)).all()}
-    compradores = {c.id: c for c in s.exec(select(Comprador)).all()}
-    # los enum se pasan a texto: pandas no compara bien objetos Enum
-    df["calidad"] = df["calidad"].map(lambda c: c.value)
-    df["origen"] = df["origen"].map(lambda o: o.value)
-    df["especie"] = df["especie_id"].map(especies)
-    df["comprador_tipo"] = df["comprador_id"].map(lambda i: compradores[i].tipo.value if i in compradores else None)
-    df["fecha"] = pd.to_datetime(df["fecha"])
-    df["ingreso"] = df["kg"] * df["precio_kg"]
-    return df
+        return df.copy()
+    m = pd.Series(True, index=df.index)
+    if desde:
+        m &= df["fecha"] >= pd.Timestamp(desde)
+    if hasta:
+        m &= df["fecha"] <= pd.Timestamp(hasta)
+    if embarcacion_id:
+        m &= df["embarcacion_id"] == embarcacion_id
+    if not incluir_errores:
+        m &= ~df["calidad"].isin([c.value for c in EXCLUIDAS])
+    return df[m].copy()
 
 
 def salidas_df(df: pd.DataFrame) -> pd.DataFrame:
     """Agrupa líneas por salida (fecha + embarcación) y calcula ingreso vs costo."""
     if df.empty:
         return df
-    g = df.groupby(["fecha", "embarcacion_id"]).agg(
-        kg=("kg", "sum"),
-        ingreso=("ingreso", lambda x: x.sum(min_count=1)),
-        precio_faltante=("precio_kg", lambda x: x.isna().any()),
-        litros=("litros_combustible", lambda x: x.sum(min_count=1)),
-        precio_litro=("precio_litro", "max"),
-        carnada=("costo_carnada", lambda x: x.sum(min_count=1)),
-    ).reset_index()
-    g["costo"] = g["litros"] * g["precio_litro"].fillna(config.PRECIO_LITRO_DEFECTO) + g["carnada"].fillna(0)
-    g["margen"] = g["ingreso"] - g["costo"]
+    claves = [df["fecha"], df["embarcacion_id"]]
+    g = df.groupby(claves)
+    out = pd.DataFrame({
+        "kg": g["kg"].sum(),
+        "ingreso": g["ingreso"].sum(min_count=1),
+        "precio_faltante": df["precio_kg"].isna().groupby(claves).any(),
+        "litros": g["litros_combustible"].sum(min_count=1),
+        "precio_litro": g["precio_litro"].max(),
+        "carnada": g["costo_carnada"].sum(min_count=1),
+    }).reset_index()
+    out["costo"] = out["litros"] * out["precio_litro"].fillna(config.PRECIO_LITRO_DEFECTO) + out["carnada"].fillna(0)
+    out["margen"] = out["ingreso"] - out["costo"]
     # solo se puede juzgar una salida si tiene ingreso y costo completos
-    g["evaluable"] = g["ingreso"].notna() & g["litros"].notna() & ~g["precio_faltante"]
-    g["no_cubre"] = g["evaluable"] & (g["margen"] < 0)
-    return g
+    out["evaluable"] = out["ingreso"].notna() & out["litros"].notna() & ~out["precio_faltante"]
+    out["no_cubre"] = out["evaluable"] & (out["margen"] < 0)
+    return out
 
 
 # ------------------------------------------------------------------ precios
@@ -174,7 +212,9 @@ class Semaforo(Veredicto):
 
 
 def semaforo_salida(s: Session, embarcacion_id: int, especie_id: int, fecha: date,
-                    hoy: Optional[date] = None) -> Semaforo:
+                    hoy: Optional[date] = None, mar: Optional[tuple] = None,
+                    fuente_mar: str = "simulado") -> Semaforo:
+    """`mar` = (ola_m, viento_nudos) del pronóstico real; si es None se usa el simulado."""
     hoy = hoy or date.today()
     bote = s.get(Embarcacion, embarcacion_id)
     especie = s.get(Especie, especie_id)
@@ -194,10 +234,12 @@ def semaforo_salida(s: Session, embarcacion_id: int, especie_id: int, fecha: dat
             "Revisa otra especie disponible para esa fecha."])
 
     # 2) estado del mar (simulado)
-    mar = s.get(CondicionMar, fecha)
+    if mar is None:
+        sim = s.get(CondicionMar, fecha)
+        mar = (sim.ola_m, sim.viento_nudos) if sim else None
     ola = viento = None
-    if mar:
-        ola, viento = mar.ola_m, mar.viento_nudos
+    if mar and mar[0] is not None:
+        ola, viento = mar[0], mar[1] or 0
         if ola >= config.OLA_ROJO_M or viento >= config.VIENTO_ROJO_NUDOS:
             empeorar("rojo")
             razones.append(f"🌊 Mar malo: ola {dec(ola)} m, viento {viento:.0f} nudos.")
@@ -206,6 +248,7 @@ def semaforo_salida(s: Session, embarcacion_id: int, especie_id: int, fecha: dat
             razones.append(f"🌊 Mar regular: ola {dec(ola)} m, viento {viento:.0f} nudos.")
         else:
             razones.append(f"🌊 Mar bueno: ola {dec(ola)} m, viento {viento:.0f} nudos.")
+        razones[-1] = razones[-1].rstrip(".") + f" (fuente: {fuente_mar})."
     else:
         empeorar("amarillo")
         razones.append("🌊 No hay pronóstico para esa fecha.")
@@ -251,10 +294,15 @@ def semaforo_salida(s: Session, embarcacion_id: int, especie_id: int, fecha: dat
 
     # 4) lo que pasó en días con mar parecido (historia de toda la caleta)
     if ola is not None:
-        hist = salidas_df(desembarques_df(s, desde=hoy - timedelta(days=365), hasta=hoy))
-        mares = {m.fecha: m.ola_m for m in s.exec(select(CondicionMar).where(CondicionMar.es_pronostico == False)).all()}  # noqa: E712
+        def historia():
+            h = salidas_df(desembarques_df(s, desde=hoy - timedelta(days=365), hasta=hoy))
+            mares = {pd.Timestamp(m.fecha): m.ola_m for m in s.exec(
+                select(CondicionMar).where(CondicionMar.es_pronostico == False)).all()}  # noqa: E712
+            if not h.empty:
+                h["ola"] = h["fecha"].map(mares)
+            return h
+        hist = _memo(("historia_mar", hoy), historia)
         if not hist.empty:
-            hist["ola"] = hist["fecha"].dt.date.map(mares)
             parecido = hist[hist["evaluable"] & ((hist["ola"] - ola).abs() <= 0.3)]
             if len(parecido) >= 10:
                 pct = parecido["no_cubre"].mean() * 100
@@ -325,22 +373,31 @@ def cuotas(s: Session, hoy: Optional[date] = None) -> list[dict]:
 
 # ------------------------------------------------------------------ trabajo en tierra
 def tierra_df(s: Session, desde: Optional[date] = None, hasta: Optional[date] = None) -> pd.DataFrame:
-    q = select(TrabajoTierra).where(TrabajoTierra.calidad != Calidad.ERROR)
-    if desde:
-        q = q.where(TrabajoTierra.fecha >= desde)
-    if hasta:
-        q = q.where(TrabajoTierra.fecha <= hasta)
-    df = pd.DataFrame([t.model_dump() for t in s.exec(q).all()])
-    if df.empty:
+    def cargar():
+        df = pd.read_sql(select(TrabajoTierra), s.connection())
+        if df.empty:
+            return df
+        df["fecha"] = pd.to_datetime(df["fecha"])
+        df["tipo"] = df["tipo"].map(lambda v: _valor_enum(TipoTrabajo, v))
+        df["calidad"] = df["calidad"].map(lambda v: _valor_enum(Calidad, v))
+        tarifa = {t.value: config.TARIFA_TIERRA[t][1] for t in TipoTrabajo}
+        df["valor"] = df["cantidad"] * df["tipo"].map(tarifa)
+        nombres = {p.id: p.nombre for p in s.exec(select(PersonaTierra)).all()}
+        df["persona"] = df["persona_id"].map(nombres)
         return df
-    df["fecha"] = pd.to_datetime(df["fecha"])
-    df["valor"] = df.apply(lambda r: valorizar(r["tipo"], r["cantidad"]), axis=1)
-    df["tipo"] = df["tipo"].map(lambda t: t.value)
-    return df
+    df = _memo("tierra", cargar)
+    if df.empty:
+        return df.copy()
+    m = ~df["calidad"].isin([c.value for c in EXCLUIDAS])
+    if desde:
+        m &= df["fecha"] >= pd.Timestamp(desde)
+    if hasta:
+        m &= df["fecha"] <= pd.Timestamp(hasta)
+    return df[m].copy()
 
 
 def valorizar(tipo, cantidad: float) -> float:
-    _unidad, tarifa = config.TARIFA_TIERRA[tipo]
+    _unidad, tarifa = config.TARIFA_TIERRA[TipoTrabajo(tipo)]
     return cantidad * tarifa
 
 

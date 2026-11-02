@@ -26,6 +26,11 @@ class Calidad(str, Enum):
     OK = "ok"
     ADVERTENCIA = "advertencia"   # se guarda, pero queda marcado para revisión
     ERROR = "error"               # no se usa en los cálculos
+    RECHAZADO = "rechazado"       # la directiva lo anuló al revisarlo: no se usa
+
+
+# calidades que NO entran a ningún cálculo
+EXCLUIDAS = (Calidad.ERROR, Calidad.RECHAZADO)
 
 
 class TipoComprador(str, Enum):
@@ -82,6 +87,7 @@ class PersonaTierra(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     nombre: str
     rol_principal: TipoTrabajo
+    activa: bool = True
 
 
 # ---------------------------------------------------------------- registros
@@ -101,6 +107,9 @@ class Desembarque(SQLModel, table=True):
     calidad: Calidad = Calidad.OK
     notas_calidad: str = ""                  # motivos de la advertencia/error
     registrado_por: str = ""
+    revisado_por: str = ""                   # quién aprobó/rechazó
+    revisado_en: Optional[datetime] = None
+    calidad_original: Optional[str] = None   # para poder deshacer una revisión
     creado_en: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -124,3 +133,20 @@ class CondicionMar(SQLModel, table=True):
     ola_m: float
     viento_nudos: float
     es_pronostico: bool = False
+
+
+class Aviso(SQLModel, table=True):
+    """Comunicado que la directiva publica para toda la caleta."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    titulo: str
+    cuerpo: str
+    tipo: str = "info"              # info | alerta | reunion
+    fijado: bool = False
+    publicado_en: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    autor: str = "Directiva"
+
+
+class Meta(SQLModel, table=True):
+    """Versión del esquema: si cambia, la base de demo se regenera."""
+    clave: str = Field(primary_key=True)
+    valor: str
