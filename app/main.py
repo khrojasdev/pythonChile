@@ -7,8 +7,9 @@ from nicegui import app, ui
 
 from app import config
 from app.ilustraciones import LOGO
-from app.pages import (avisos_clima, cuaderno, gestion, informes, ingresar, inicio, limites,  # noqa: F401
-                       mis_numeros, pendientes, portada, precio, registro, revision, salir, tierra)
+from app.pages import (avisos_clima, comprobantes, cuaderno, gestion, informes, ingresar, inicio,  # noqa: F401
+                       limites, mis_numeros, pendientes, pizarra, portada, precio, registro, revision, salir,
+                       tierra, ventas_conjuntas, zarpe)
 from app.seed import asegurar_datos
 
 app.add_static_files("/static", Path(__file__).parent / "static")

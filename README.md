@@ -26,6 +26,17 @@ Hecha 100 % en Python: NiceGUI (interfaz), SQLModel (datos y validación), panda
 
 PIN de demo: registradora **0000**, directiva **1234**.
 
+### Funciones nuevas (versión 3)
+
+| Función | Quién | Qué problema resuelve |
+|---|---|---|
+| **Venta conjunta** (`/ventas-conjuntas`) | Los tres perfiles | Un bote solo no negocia. Los botes juntan kilos de una especie con un precio mínimo; al cerrar la venta el pago se reparte por kilos y el precio queda anotado en el desembarque de cada bote. Muestra cuánto más se gana frente al intermediario. |
+| **Aviso de zarpe** (`/zarpe`) y **En el mar ahora** (`/en-el-mar`) | Pescador / registradora y directiva | Saber quién está en el mar y avisar si alguien pasa 30 min de su hora de vuelta. No se registra la zona de pesca. No reemplaza el zarpe oficial. |
+| **Dictado por voz** (en `/registro`) | Pescador y registradora | Con manos mojadas: «merluza noventa kilos a mil trescientos» llena el formulario. Usa el micrófono del navegador (Chrome) o se puede escribir la frase. |
+| **Comprobante de trabajo en tierra** (`/comprobantes`) | Registradora y directiva | PDF por persona y periodo, con días, horas y valor estimado, para subsidios o cursos. |
+| **¿Listos para postular a un fondo?** (en `/informes`) | Directiva | Revisa 6 requisitos con los datos reales y dice qué falta. |
+| **Pizarra del muelle** (`/pizarra`) | Pública, sin ingresar | Para un televisor en la sede: precios de la semana, estado del mar, botes en el mar y ventas conjuntas abiertas. Se actualiza sola. |
+
 ## Correr en local (Windows)
 
 ```bash

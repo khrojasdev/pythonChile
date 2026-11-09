@@ -109,3 +109,47 @@ async def test_directiva_publica_aviso(user: User):
     user.find(marker="aviso-publicar").click()
     await user.should_see("Aviso publicado")
     await user.should_see("Corte de agua en el muelle")
+
+
+async def test_paginas_nuevas_por_rol(user: User):
+    for rol, rutas in {"pescador": ["/zarpe", "/ventas-conjuntas"],
+                       "registradora": ["/en-el-mar", "/ventas-conjuntas", "/comprobantes"],
+                       "sindicato": ["/en-el-mar", "/ventas-conjuntas", "/comprobantes", "/informes"]}.items():
+        await entrar(user, rol)
+        for ruta in rutas:
+            await user.open(ruta)
+            await user.should_see("Cambiar de perfil")
+        await user.open("/")
+
+
+async def test_pizarra_publica(user: User):
+    await user.open("/pizarra")
+    await user.should_see("Pizarra del muelle")
+    await user.should_see("Precio de playa esta semana")
+
+
+async def test_dictado_llena_formulario(user: User):
+    await entrar(user, "pescador")
+    await user.open("/registro")
+    user.find(marker="frase-dictado").type("merluza noventa kilos a mil trescientos")
+    user.find(marker="entender").click()
+    await user.should_see("Entendí: Merluza, 90 kg, a $1.300")
+    import asyncio
+    await asyncio.sleep(0.3)        # los campos se actualizan por enlace (binding), no al instante
+    numeros = [(n.props.get("label"), n.value, n.is_deleted) for n in user.find(ui.number).elements]
+    assert ("Kilos", 90, False) in numeros and ("Precio $/kg", 1300, False) in numeros
+
+
+async def test_pescador_avisa_zarpe_y_vuelve(user: User):
+    await entrar(user, "pescador")
+    await user.open("/zarpe")
+    user.find(marker="avisar-zarpe").click()
+    await user.should_see("Zarpe avisado")
+    user.find(marker="ya-volvi").click()
+    await user.should_see("Regreso anotado")
+
+
+async def test_directiva_ve_lista_de_fondos(user: User):
+    await entrar(user, "sindicato")
+    await user.open("/informes")
+    await user.should_see("¿Listos para postular a un fondo?")

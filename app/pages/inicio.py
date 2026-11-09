@@ -10,6 +10,8 @@ from app.analytics import clp, clp_corto, dec
 from app.db import sesion
 from app.models import Aviso, Calidad, Desembarque, Embarcacion, Especie, Rol
 from app.servicios import clima
+from app.pages.ventas_conjuntas import tarjeta_lotes_abiertos
+from app.pages.zarpe import tarjeta_en_el_mar
 from app.ui_comun import BOYA, COLORES, MAR, MARINO, bote_actual, kpi, marco, rol_actual, sin_permiso, \
     tarjeta_veredicto, vacio
 
@@ -92,8 +94,12 @@ async def _mi_dia():
         ult = df.sort_values("fecha", ascending=False).head(5) if not df.empty else df
         m = analytics.mis_numeros(s, bote, dias=30)
     with marco(f"Hola, {b.patron.split()[0]}", "/inicio", f"{b.nombre} · resumen de tu día"):
-        ui.button("Anotar desembarque", icon="add_circle", on_click=lambda: ui.navigate.to("/registro")) \
-            .classes("w-full").props("unelevated size=lg")
+        with ui.row().classes("fila-resp gap-2"):
+            ui.button("Anotar desembarque", icon="add_circle", on_click=lambda: ui.navigate.to("/registro")) \
+                .classes("flex-1").props("unelevated size=lg")
+            ui.button("Aviso de zarpe", icon="sailing", on_click=lambda: ui.navigate.to("/zarpe")) \
+                .classes("flex-1").props("unelevated size=lg color=secondary")
+        tarjeta_lotes_abiertos()
         if pendientes:
             with ui.row().classes("tarjeta items-center justify-between no-wrap gap-3") \
                     .style(f"border-left:8px solid {BOYA}"):
@@ -158,6 +164,8 @@ async def _jornada():
                 .classes("flex-1").props("unelevated size=lg")
             ui.button("Anotar trabajo en tierra", icon="front_hand", on_click=lambda: ui.navigate.to("/tierra")) \
                 .classes("flex-1").props("unelevated size=lg color=secondary")
+        tarjeta_en_el_mar()
+        tarjeta_lotes_abiertos()
         with ui.element("div").classes("rejilla"):
             kpi(str(df_hoy["embarcacion_id"].nunique() if not df_hoy.empty else 0), "botes llegaron hoy",
                 "directions_boat")
@@ -205,6 +213,7 @@ async def _panel():
         cal = analytics.resumen_calidad(s)
     pc = cal["por_calidad"]
     with marco("Panel de la caleta", "/inicio", "Totales de la caleta, sin datos individuales de cada bote."):
+        tarjeta_en_el_mar()
         if pc.get("advertencia", 0):
             with ui.row().classes("tarjeta items-center justify-between no-wrap gap-3") \
                     .style(f"border-left:8px solid {BOYA}"):

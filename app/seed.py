@@ -20,7 +20,7 @@ from sqlmodel import select
 
 from app import config
 from app.db import crear_tablas, engine, sesion
-from app.models import (Aviso, Meta, Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
+from app.models import (Aviso, EstadoLote, Lote, LoteAporte, Zarpe, Meta, Calidad, Comprador, CondicionMar, Desembarque, Embarcacion,
                         Especie, Origen, PersonaTierra, TipoComprador, TipoTrabajo,
                         TrabajoTierra)
 from app.validation import ReferenciaPrecio, validar_desembarque, validar_trabajo_tierra
@@ -69,7 +69,7 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
 
     crear_tablas()
     with sesion() as s:
-        for modelo in (Aviso, TrabajoTierra, Desembarque, CondicionMar, PersonaTierra,
+        for modelo in (LoteAporte, Lote, Zarpe, Aviso, TrabajoTierra, Desembarque, CondicionMar, PersonaTierra,
                        Comprador, Embarcacion, Especie):
             s.exec(delete(modelo))
         s.commit()
@@ -234,6 +234,7 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
         s.execute(insert(Desembarque), filas_d)
         s.execute(insert(TrabajoTierra), filas_t)
         _avisos_demo(s, hoy)
+        _lotes_y_zarpes_demo(s, hoy, especies, botes, compradores)
         meta = s.get(Meta, "schema") or Meta(clave="schema", valor="")
         meta.valor = SCHEMA
         s.add(meta)
@@ -244,7 +245,7 @@ def generar(hoy: date | None = None, verbose: bool = True) -> None:
               f"{len(filas_t)} registros de trabajo en tierra.")
 
 
-SCHEMA = "2"   # súbelo cuando cambien las tablas: la base de demo se regenera sola
+SCHEMA = "3"   # súbelo cuando cambien las tablas: la base de demo se regenera sola
 
 
 def _avisos_demo(s, hoy: date) -> None:
@@ -260,6 +261,34 @@ def _avisos_demo(s, hoy: date) -> None:
     for titulo, cuerpo, tipo, fijado, dias in avisos:
         s.add(Aviso(titulo=titulo, cuerpo=cuerpo, tipo=tipo, fijado=fijado,
                     publicado_en=datetime.combine(hoy - timedelta(days=dias), time(21, 30), tzinfo=timezone.utc)))
+
+
+def _lotes_y_zarpes_demo(s, hoy: date, especies, botes, compradores) -> None:
+    """Una venta conjunta abierta hoy, una ya vendida y algunos botes en el mar."""
+    from datetime import datetime, timedelta as td
+    from app.zarpes import ahora_local
+    por_nombre = {e.nombre: e for e in especies}
+    lote = Lote(fecha=hoy, especie_id=por_nombre["Reineta"].id, precio_minimo=2700, creado_por="Registradora",
+                nota="Pescadería La Ola pidió 300 kg para el fin de semana.")
+    vendido = Lote(fecha=hoy - td(days=6), especie_id=por_nombre["Merluza"].id, precio_minimo=1900,
+                   estado=EstadoLote.VENDIDO, comprador_id=compradores[3].id, precio_venta=2150,
+                   creado_por="Registradora", cerrado_por="Registradora")
+    s.add_all([lote, vendido])
+    s.flush()
+    for b, kg in [(botes[0], 70), (botes[3], 55), (botes[7], 48)]:
+        s.add(LoteAporte(lote_id=lote.id, embarcacion_id=b.id, kg=kg))
+    for b, kg in [(botes[1], 120), (botes[4], 95), (botes[9], 80), (botes[12], 60)]:
+        s.add(LoteAporte(lote_id=vendido.id, embarcacion_id=b.id, kg=kg))
+
+    ahora = ahora_local().replace(second=0, microsecond=0)
+    for b, salio_h, vuelve_h, trip, contacto in [(botes[2], 4, 3, 2, "su hija Carla"),
+                                                 (botes[5], 6, -1, 3, "su esposa Marta"),
+                                                 (botes[10], 2, 5, 2, "")]:
+        s.add(Zarpe(embarcacion_id=b.id, salida_en=ahora - td(hours=salio_h),
+                    regreso_estimado=ahora + td(hours=vuelve_h), tripulantes=trip,
+                    contacto=contacto, registrado_por=b.nombre))
+    s.add(Zarpe(embarcacion_id=botes[6].id, salida_en=ahora - td(hours=9), regreso_estimado=ahora - td(hours=3),
+                regreso_en=ahora - td(hours=3, minutes=20), tripulantes=2, registrado_por=botes[6].nombre))
 
 
 def asegurar_datos() -> None:

@@ -11,6 +11,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
+from pydantic import NaiveDatetime
 from sqlmodel import Field, SQLModel
 
 
@@ -150,3 +151,45 @@ class Meta(SQLModel, table=True):
     """Versión del esquema: si cambia, la base de demo se regenera."""
     clave: str = Field(primary_key=True)
     valor: str
+
+
+# ---------------------------------------------------------------- venta conjunta
+class EstadoLote(str, Enum):
+    ABIERTO = "abierto"        # los botes se van sumando
+    VENDIDO = "vendido"        # se cerró la venta y se repartió
+    CANCELADO = "cancelado"
+
+
+class Lote(SQLModel, table=True):
+    """Venta conjunta: varios botes juntan kilos de una especie para negociar un mejor precio."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    fecha: date = Field(index=True)
+    especie_id: int = Field(foreign_key="especie.id")
+    precio_minimo: int                     # $/kg acordado: bajo esto no se vende
+    estado: EstadoLote = EstadoLote.ABIERTO
+    comprador_id: Optional[int] = Field(default=None, foreign_key="comprador.id")
+    precio_venta: Optional[int] = None
+    creado_por: str = ""
+    cerrado_por: str = ""
+    nota: str = ""
+
+
+class LoteAporte(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    lote_id: int = Field(foreign_key="lote.id", index=True)
+    embarcacion_id: int = Field(foreign_key="embarcacion.id")
+    kg: float
+
+
+# ---------------------------------------------------------------- seguridad en el mar
+class Zarpe(SQLModel, table=True):
+    """Aviso de salida: quién salió, con cuántas personas y a qué hora piensa volver.
+    No se registra la zona de pesca (es información sensible para el pescador)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    embarcacion_id: int = Field(foreign_key="embarcacion.id", index=True)
+    salida_en: NaiveDatetime               # hora local de la caleta (sin zona)
+    regreso_estimado: NaiveDatetime
+    tripulantes: int = 2
+    contacto: str = ""                     # a quién avisar en tierra
+    regreso_en: Optional[NaiveDatetime] = None
+    registrado_por: str = ""

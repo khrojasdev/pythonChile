@@ -23,7 +23,8 @@ AZUL, ARENA = MARINO, ESPUMA
 FUENTES = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
            '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
            '<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800'
-           '&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">')
+           '&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet" media="print" '
+           'onload="this.media=\'all\'">')   # no bloquea la página si la red del muelle es lenta
 
 CSS = f"""
 <style>
@@ -74,9 +75,11 @@ NOMBRE_ROL = {Rol.PESCADOR.value: "Pescador", Rol.REGISTRADORA.value: "Registrad
 MENUS = {
     Rol.PESCADOR.value: [
         ("Mi día", "today", "/inicio"),
+        ("Aviso de zarpe", "sailing", "/zarpe"),
         ("Anotar desembarque", "add_circle", "/registro"),
         ("Ventas por completar", "pending_actions", "/pendientes"),
-        ("¿Salgo mañana?", "sailing", "/salir"),
+        ("Venta conjunta", "groups", "/ventas-conjuntas"),
+        ("¿Salgo mañana?", "explore", "/salir"),
         ("¿Es buen precio?", "price_check", "/precio"),
         ("Mis números", "insights", "/mis-numeros"),
         ("Clima y mar", "waves", "/clima"),
@@ -85,8 +88,11 @@ MENUS = {
     Rol.REGISTRADORA.value: [
         ("Jornada de hoy", "today", "/inicio"),
         ("Anotar desembarque", "add_circle", "/registro"),
+        ("En el mar ahora", "sailing", "/en-el-mar"),
         ("Trabajo en tierra", "front_hand", "/tierra"),
         ("Ventas por completar", "pending_actions", "/pendientes"),
+        ("Venta conjunta", "handshake", "/ventas-conjuntas"),
+        ("Comprobantes", "badge", "/comprobantes"),
         ("Personas en tierra", "groups", "/personas"),
         ("Digitalizar cuaderno", "menu_book", "/cuaderno"),
         ("Pizarra de precios", "price_check", "/precio"),
@@ -96,8 +102,11 @@ MENUS = {
     Rol.SINDICATO.value: [
         ("Panel de la caleta", "space_dashboard", "/inicio"),
         ("Revisión de datos", "fact_check", "/revision"),
-        ("Informes y descargas", "download", "/informes"),
+        ("Informes y fondos", "download", "/informes"),
+        ("En el mar ahora", "sailing", "/en-el-mar"),
+        ("Venta conjunta", "handshake", "/ventas-conjuntas"),
         ("Aporte en tierra", "front_hand", "/aporte-tierra"),
+        ("Comprobantes", "badge", "/comprobantes"),
         ("Vedas y cuotas", "gavel", "/cuotas"),
         ("Embarcaciones", "directions_boat", "/embarcaciones"),
         ("Precios de playa", "price_check", "/precio"),
@@ -167,6 +176,7 @@ def marco(titulo: str, ruta: Optional[str] = None, bajada: Optional[str] = None)
                     ui.item_section(texto)
             ui.separator().style("background:rgba(255,255,255,.12); margin:10px 16px")
             for texto, icono, accion in [("Cómo usamos los datos", "info", lambda: ui.navigate.to("/limites")),
+                                         ("Pizarra del muelle", "tv", lambda: ui.navigate.to("/pizarra")),
                                          ("Portada", "home", lambda: ui.navigate.to("/")),
                                          ("Cambiar de perfil", "logout", salir_sesion)]:
                 with ui.item(on_click=accion).classes("activo" if ruta == "/limites" and icono == "info" else "") \

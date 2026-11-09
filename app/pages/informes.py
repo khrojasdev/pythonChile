@@ -5,11 +5,11 @@ import pandas as pd
 from nicegui import run, ui
 from sqlmodel import select
 
-from app import analytics, exportar
+from app import analytics, exportar, fondos
 from app.db import sesion
 from app.models import Embarcacion, Rol
 from app.reports import generar_pdf
-from app.ui_comun import MAR, marco, sin_permiso
+from app.ui_comun import BOYA, COLORES, MAR, marco, sin_permiso
 
 
 def _desembarques(desde: date, hasta: date) -> pd.DataFrame:
@@ -75,6 +75,8 @@ def informes():
                 ui.download.content(pdf, f"ficha_caleta_{hoy:%Y%m%d}.pdf", "application/pdf")
             b = ui.button("Descargar ficha (PDF)", icon="picture_as_pdf", on_click=ficha).props("unelevated size=lg")
 
+        _lista_fondos()
+
         with ui.column().classes("tarjeta gap-3"):
             ui.html("<h2>Tablas del periodo</h2>")
             with ui.row().classes("gap-2 items-center"):
@@ -103,3 +105,36 @@ def informes():
                         ui.button("CSV", icon="table_view", on_click=lambda f=fn, n=nombre: ui.download.content(
                             exportar.a_csv(f(*rango())), f"{n}.csv", "text/csv")).props("outline") \
                             .mark(f"csv-{nombre}")
+
+
+def _lista_fondos():
+    """¿Listos para postular a un fondo? Revisa los datos y dice qué falta."""
+    with sesion() as s:
+        reqs = fondos.revisar(s)
+    ok, total = fondos.puntaje(reqs)
+    color = COLORES["verde"] if ok == total else BOYA if ok >= total - 2 else COLORES["rojo"]
+    with ui.column().classes("tarjeta gap-3").style(f"border-top:6px solid {color}").mark("lista-fondos"):
+        with ui.row().classes("w-full items-center justify-between gap-2"):
+            with ui.column().classes("gap-0"):
+                ui.html("<h2>¿Listos para postular a un fondo?</h2>")
+                ui.label("Lo que un evaluador suele mirar, revisado con los datos de los últimos 12 meses.") \
+                    .classes("text-sm tenue")
+            ui.label(f"{ok} de {total}").classes("kpi-valor").style(f"color:{color}")
+        for r in reqs:
+            with ui.row().classes("tarjeta-plana items-start gap-3 no-wrap"):
+                ui.icon("check_circle" if r.cumple else "radio_button_unchecked", size="28px") \
+                    .style(f"color:{COLORES['verde'] if r.cumple else BOYA}")
+                with ui.column().classes("gap-1 flex-1"):
+                    with ui.row().classes("w-full justify-between gap-2"):
+                        ui.label(r.titulo).classes("font-bold")
+                        ui.label(f"{r.valor} · meta: {r.meta}").classes("text-sm")
+                    ui.linear_progress(r.avance, show_value=False, size="8px") \
+                        .props(f"color={'positive' if r.cumple else 'warning'} rounded")
+                    if not r.cumple:
+                        ui.label(r.consejo).classes("text-sm")
+        with ui.row().classes("gap-2 items-center"):
+            ui.label("Guía interna: cada convocatoria tiene sus propias bases.").classes("tenue text-sm")
+            ui.button("Descargar lista (PDF)", icon="picture_as_pdf", on_click=lambda: ui.download.content(
+                exportar.a_pdf(fondos.tabla(reqs), "¿Listos para postular a un fondo?",
+                               f"{ok} de {total} requisitos cumplidos. Datos de los últimos 12 meses."),
+                "lista_fondos.pdf", "application/pdf")).props("outline")

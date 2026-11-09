@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from nicegui import app, ui
 from sqlmodel import select
 
-from app import analytics, config
+from app import analytics, config, dictado
 from app.db import sesion
 from app.models import (Calidad, Comprador, Desembarque, Embarcacion, Especie, Origen, Rol)
 from app.ui_comun import bote_actual, marco, rol_actual, selector_especies, sin_permiso, tarjeta_veredicto
@@ -33,6 +33,7 @@ def registro():
               "litros": None, "carnada": None, "lineas": [_linea_vacia()]}
 
     with marco("Anotar desembarque", "/registro", "Se anota en tierra, al llegar. Solo especie y kilos son obligatorios; el precio se puede completar después."):
+        _tarjeta_dictado(especies, estado, lambda: lineas.refresh())
         with ui.column().classes("tarjeta"):
             if rol_actual() == Rol.REGISTRADORA.value:
                 ui.select(botes, label="Embarcación", with_input=True).bind_value(estado, "embarcacion_id") \
@@ -83,6 +84,76 @@ def registro():
 
         ui.button("Guardar desembarque", icon="save", on_click=guardar).classes("w-full text-lg") \
             .props("size=lg unelevated")
+
+
+JS_DICTAR = """
+(() => {
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!R) { emitEvent('dictado_error', 'sin_soporte'); return; }
+  const r = new R(); r.lang = 'es-CL'; r.interimResults = false; r.maxAlternatives = 1;
+  r.onresult = (e) => emitEvent('dictado', e.results[0][0].transcript);
+  r.onerror = (e) => emitEvent('dictado_error', e.error);
+  r.onend = () => emitEvent('dictado_fin', '');
+  r.start();
+})();
+"""
+
+
+def _tarjeta_dictado(especies, estado, refrescar):
+    """Dictar en vez de tocar: «merluza noventa kilos a mil trescientos»."""
+    nombres = [e.nombre for e in especies]
+    por_nombre = {e.nombre: e.id for e in especies}
+
+    def aplicar(texto: str):
+        frase.value = texto
+        res = dictado.interpretar(texto, nombres)
+        if not res.lineas and not res.litros:
+            ui.notify("No reconocí ninguna especie. Prueba: «merluza noventa kilos a mil trescientos».",
+                      type="warning", multi_line=True)
+            return
+        lineas = [ln for ln in estado["lineas"] if ln["especie_id"]]
+        for ln in res.lineas:
+            lineas.append({"especie_id": por_nombre[ln.especie], "kg": ln.kg, "precio": ln.precio,
+                           "comprador_id": 0,
+                           "origen": Origen.ESTIMADO.value if ln.estimado else Origen.PESADO.value})
+        estado["lineas"] = lineas or [_linea_vacia()]
+        if res.litros:
+            estado["litros"] = res.litros
+        refrescar()
+        entendido.text = "Entendí: " + res.resumen() + ". Revisa y aprieta «Guardar desembarque»."
+        entendido.set_visibility(True)
+
+    def error(e):
+        boton.props(remove="loading")
+        motivo = {"sin_soporte": "Este navegador no permite dictar. Usa Chrome en Android, o escribe la frase.",
+                  "not-allowed": "No hay permiso para el micrófono. Actívalo o escribe la frase.",
+                  "no-speech": "No escuché nada. Inténtalo de nuevo, más cerca del celular."}
+        ui.notify(motivo.get(e.args, f"No se pudo dictar ({e.args}). Escribe la frase."), type="warning",
+                  multi_line=True)
+
+    def escuchar():
+        boton.props("loading")
+        ui.run_javascript(JS_DICTAR)
+
+    ui.on("dictado", lambda e: (boton.props(remove="loading"), aplicar(e.args)))
+    ui.on("dictado_error", error)
+    ui.on("dictado_fin", lambda: boton.props(remove="loading"))
+
+    with ui.column().classes("tarjeta gap-2").style("border-left:6px solid #F2A900"):
+        with ui.row().classes("items-center gap-3 no-wrap w-full"):
+            boton = ui.button(icon="mic", on_click=escuchar).props("round unelevated size=lg color=accent "
+                                                                  "text-color=dark").mark("dictar") \
+                .props('aria-label="Dictar desembarque"')
+            with ui.column().classes("gap-0"):
+                ui.label("Dictar en vez de escribir").classes("font-bold text-lg")
+                ui.label("Di, por ejemplo: «merluza noventa kilos a mil trescientos, y reineta cuarenta kilos»")\
+                    .classes("text-sm tenue")
+        with ui.row().classes("w-full gap-2 items-end no-wrap"):
+            frase = ui.input("…o escribe la frase").classes("flex-1").mark("frase-dictado") \
+                .on("keydown.enter", lambda: aplicar(frase.value or ""))
+            ui.button("Entender", on_click=lambda: aplicar(frase.value or "")).props("outline").mark("entender")
+        entendido = ui.label("").classes("font-bold").style("color:#2E7D4F").mark("entendido")
+        entendido.set_visibility(False)
 
 
 async def _guardar(estado, resultado, lineas):

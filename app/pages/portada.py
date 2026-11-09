@@ -85,6 +85,8 @@ async def portada():
                 ui.label("Mar Adentro").classes("marca-nombre")
                 ui.label("Caleta digital").classes("marca-sub")
             ui.space()
+            ui.button("Pizarra del muelle", icon="tv", on_click=lambda: ui.navigate.to("/pizarra")) \
+                .props("flat color=white no-caps").classes("gt-xs").mark("boton-pizarra")
             ui.button("Ir a mi panel" if rol_actual() else "Ingresar", icon="login",
                       on_click=lambda: ui.navigate.to(destino)) \
                 .props("color=accent text-color=dark unelevated").mark("boton-ingresar")
